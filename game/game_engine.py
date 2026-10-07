@@ -3,6 +3,7 @@ import random
 from .player import Player
 from .enemy import EnemyGrid
 from .bullet import Bullet
+from .sounds import SoundManager
 
 # Game Engine
 
@@ -38,6 +39,9 @@ class GameEngine:
 
         self.font = pygame.font.SysFont("Arial", 30)
         self.title_font = pygame.font.SysFont("Arial", 64, bold=True)
+
+        # Sounds are generated once and survive resets. Falls back to silence if audio is unavailable.
+        self.sounds = SoundManager()
 
         # Reused every frame for the dimmed game-over background
         self._overlay = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -77,6 +81,7 @@ class GameEngine:
                 bullet_x = self.player.center_x() - 2
                 self.player_bullets.append(Bullet(bullet_x, self.player.y, direction=-1))
                 self._shoot_cooldown = 15
+                self.sounds.play("fire")
 
     def handle_input(self):
         if self.game_over:
@@ -122,14 +127,20 @@ class GameEngine:
         # Build a new list of surviving bullets rather than removing from the list
         # being iterated (which caused bullets to be skipped).
         surviving_bullets = []
+        enemies_destroyed = 0
         for bullet in self.player_bullets:
             enemy = self._find_hit_enemy(bullet)
             if enemy is not None:
                 enemy.alive = False
                 self.score += 1
+                enemies_destroyed += 1
             else:
                 surviving_bullets.append(bullet)
         self.player_bullets = surviving_bullets
+
+        # One explosion sound per frame, even if several enemies died at once
+        if enemies_destroyed:
+            self.sounds.play("enemy_destroyed")
 
         for bullet in self.enemy_bullets:
             if bullet.rect().colliderect(self.player.rect()):
@@ -141,6 +152,10 @@ class GameEngine:
 
         if self.enemy_grid.reached_bottom(self.player.y):
             self.game_over = True
+
+        # update() returns early once game_over is set, so this runs exactly once per game.
+        if self.game_over:
+            self.sounds.play("game_over")
 
     def _draw_centered(self, screen, font, text, color, center_y):
         surface = font.render(text, True, color)
