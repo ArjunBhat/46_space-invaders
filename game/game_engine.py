@@ -41,6 +41,17 @@ class GameEngine:
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.player.move(self.player.speed, self.width)
 
+    def _find_hit_enemy(self, bullet):
+        """Return the front-most alive enemy the bullet touched this frame, or None."""
+        path = bullet.swept_rect()
+        hit = None
+        for enemy in self.enemy_grid.alive_enemies():
+            if path.colliderect(enemy.rect()):
+                # Player bullets travel up, so the enemy with the lowest bottom edge is hit first.
+                if hit is None or (enemy.y + enemy.height) > (hit.y + hit.height):
+                    hit = enemy
+        return hit
+
     def update(self):
         if self.game_over:
             return
@@ -60,29 +71,26 @@ class GameEngine:
         for bullet in self.enemy_bullets:
             bullet.move()
 
-        self.player_bullets = [b for b in self.player_bullets if not b.off_screen(self.height)]
-        self.enemy_bullets = [b for b in self.enemy_bullets if not b.off_screen(self.height)]
-
-        # Bullet vs enemy collisions: build a new list instead of removing
-        # from player_bullets while iterating over it.
-        remaining_bullets = []
+        # Collisions run BEFORE off-screen pruning so bullets at the edge still count.
+        # Build a new list of surviving bullets rather than removing from the list
+        # being iterated (which caused bullets to be skipped).
+        surviving_bullets = []
         for bullet in self.player_bullets:
-            bullet_rect = bullet.rect()
-            hit = False
-            for enemy in self.enemy_grid.alive_enemies():
-                if bullet_rect.colliderect(enemy.rect()):
-                    enemy.alive = False
-                    self.score += 1
-                    hit = True
-                    break  # one bullet destroys one enemy
-            if not hit:
-                remaining_bullets.append(bullet)
-        self.player_bullets = remaining_bullets
+            enemy = self._find_hit_enemy(bullet)
+            if enemy is not None:
+                enemy.alive = False
+                self.score += 1
+            else:
+                surviving_bullets.append(bullet)
+        self.player_bullets = surviving_bullets
 
         for bullet in self.enemy_bullets:
             if bullet.rect().colliderect(self.player.rect()):
                 self.game_over = True
                 break
+
+        self.player_bullets = [b for b in self.player_bullets if not b.off_screen(self.height)]
+        self.enemy_bullets = [b for b in self.enemy_bullets if not b.off_screen(self.height)]
 
         if self.enemy_grid.reached_bottom(self.player.y):
             self.game_over = True
