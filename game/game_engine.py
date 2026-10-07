@@ -11,36 +11,65 @@ GREEN = (0, 200, 0)
 RED = (220, 60, 60)
 GRAY = (180, 180, 180)
 
+# Enemy speed (pixels per frame) and per-enemy fire chance (per frame) for each difficulty.
+# "Medium" matches the original game values.
+DIFFICULTIES = {
+    "Easy":   {"speed": 1.0, "fire_chance": 0.005},
+    "Medium": {"speed": 1.5, "fire_chance": 0.01},
+    "Hard":   {"speed": 2.5, "fire_chance": 0.02},
+}
+
+# Keys on the game-over screen that start a new game
+DIFFICULTY_KEYS = {
+    pygame.K_1: "Easy",
+    pygame.K_KP1: "Easy",
+    pygame.K_2: "Medium",
+    pygame.K_KP2: "Medium",
+    pygame.K_3: "Hard",
+    pygame.K_KP3: "Hard",
+}
+
+QUIT_KEYS = (pygame.K_q, pygame.K_ESCAPE)
+
 class GameEngine:
     def __init__(self, width, height):
         self.width = width
         self.height = height
 
-        self.player = Player(width // 2 - 20, height - 50, 40, 20)
-        self.enemy_grid = EnemyGrid(width)
-
-        self.player_bullets = []
-        self.enemy_bullets = []
-        self._shoot_cooldown = 0
-        self.enemy_fire_chance = 0.01
-
-        self.score = 0
         self.font = pygame.font.SysFont("Arial", 30)
         self.title_font = pygame.font.SysFont("Arial", 64, bold=True)
-        self.game_over = False
 
         # Reused every frame for the dimmed game-over background
         self._overlay = pygame.Surface((width, height), pygame.SRCALPHA)
         self._overlay.fill((0, 0, 0, 180))
 
+        self._reset("Medium")
+
+    def _reset(self, difficulty):
+        """Rebuild all game state from scratch using the chosen difficulty."""
+        settings = DIFFICULTIES[difficulty]
+        self.difficulty = difficulty
+
+        self.player = Player(self.width // 2 - 20, self.height - 50, 40, 20)
+        self.enemy_grid = EnemyGrid(self.width, speed=settings["speed"])
+
+        self.player_bullets = []
+        self.enemy_bullets = []
+        self._shoot_cooldown = 0
+        self.enemy_fire_chance = settings["fire_chance"]
+
+        self.score = 0
+        self.game_over = False
+
     def handle_event(self, event):
         if self.game_over:
-            # Wait for input: Enter or Esc closes the game by posting a normal QUIT event.
+            # 1/2/3 restart at that difficulty; Q or Esc closes the game by posting a QUIT event.
             # Space is intentionally ignored so rapid fire doesn't skip the screen.
-            if event.type == pygame.KEYDOWN and event.key in (
-                pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE
-            ):
-                pygame.event.post(pygame.event.Event(pygame.QUIT))
+            if event.type == pygame.KEYDOWN:
+                if event.key in DIFFICULTY_KEYS:
+                    self._reset(DIFFICULTY_KEYS[event.key])
+                elif event.key in QUIT_KEYS:
+                    pygame.event.post(pygame.event.Event(pygame.QUIT))
             return
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
@@ -121,9 +150,13 @@ class GameEngine:
     def _render_game_over(self, screen):
         screen.blit(self._overlay, (0, 0))
         mid = self.height // 2
-        self._draw_centered(screen, self.title_font, "GAME OVER", RED, mid - 60)
-        self._draw_centered(screen, self.font, f"Final Score: {self.score}", WHITE, mid + 10)
-        self._draw_centered(screen, self.font, "Press ENTER or ESC to exit", GRAY, mid + 70)
+        self._draw_centered(screen, self.title_font, "GAME OVER", RED, mid - 90)
+        self._draw_centered(screen, self.font, f"Final Score: {self.score}", WHITE, mid - 20)
+        self._draw_centered(screen, self.font, "Play again:", GRAY, mid + 40)
+        self._draw_centered(screen, self.font, "1 - Easy", WHITE, mid + 80)
+        self._draw_centered(screen, self.font, "2 - Medium", WHITE, mid + 115)
+        self._draw_centered(screen, self.font, "3 - Hard", WHITE, mid + 150)
+        self._draw_centered(screen, self.font, "Q / ESC - Exit", GRAY, mid + 205)
 
     def render(self, screen):
         pygame.draw.rect(screen, GREEN, self.player.rect())
