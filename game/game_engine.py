@@ -9,6 +9,7 @@ from .bullet import Bullet
 WHITE = (255, 255, 255)
 GREEN = (0, 200, 0)
 RED = (220, 60, 60)
+GRAY = (180, 180, 180)
 
 class GameEngine:
     def __init__(self, width, height):
@@ -25,9 +26,23 @@ class GameEngine:
 
         self.score = 0
         self.font = pygame.font.SysFont("Arial", 30)
+        self.title_font = pygame.font.SysFont("Arial", 64, bold=True)
         self.game_over = False
 
+        # Reused every frame for the dimmed game-over background
+        self._overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        self._overlay.fill((0, 0, 0, 180))
+
     def handle_event(self, event):
+        if self.game_over:
+            # Wait for input: Enter or Esc closes the game by posting a normal QUIT event.
+            # Space is intentionally ignored so rapid fire doesn't skip the screen.
+            if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE
+            ):
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+            return
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             if self._shoot_cooldown <= 0:
                 bullet_x = self.player.center_x() - 2
@@ -35,6 +50,9 @@ class GameEngine:
                 self._shoot_cooldown = 15
 
     def handle_input(self):
+        if self.game_over:
+            return
+
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.player.move(-self.player.speed, self.width)
@@ -95,6 +113,18 @@ class GameEngine:
         if self.enemy_grid.reached_bottom(self.player.y):
             self.game_over = True
 
+    def _draw_centered(self, screen, font, text, color, center_y):
+        surface = font.render(text, True, color)
+        rect = surface.get_rect(center=(self.width // 2, center_y))
+        screen.blit(surface, rect)
+
+    def _render_game_over(self, screen):
+        screen.blit(self._overlay, (0, 0))
+        mid = self.height // 2
+        self._draw_centered(screen, self.title_font, "GAME OVER", RED, mid - 60)
+        self._draw_centered(screen, self.font, f"Final Score: {self.score}", WHITE, mid + 10)
+        self._draw_centered(screen, self.font, "Press ENTER or ESC to exit", GRAY, mid + 70)
+
     def render(self, screen):
         pygame.draw.rect(screen, GREEN, self.player.rect())
 
@@ -109,7 +139,5 @@ class GameEngine:
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         screen.blit(score_text, (10, 10))
 
-        if self.game_over and not getattr(self, "_game_over_logged", False):
-            # NOTE: no proper game-over screen yet - see Task 2 in the README.
-            print("Game over! Final score:", self.score)
-            self._game_over_logged = True
+        if self.game_over:
+            self._render_game_over(screen)
